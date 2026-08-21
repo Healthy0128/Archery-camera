@@ -617,7 +617,6 @@ function resize(){
 window.addEventListener('resize',resize,{passive:true});
 resize();
 
-const clock=new THREE.Clock();
 function animate(now=performance.now()){
   requestAnimationFrame(animate);
   const dt=Math.min(clock.getDelta(),.033);
