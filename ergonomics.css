@@ -1,0 +1,114 @@
+.hold-hand-field {
+  grid-column: 1 / -1;
+  margin: 2px 0 4px;
+  border: 0;
+  padding: 0;
+}
+.hold-hand-field legend {
+  margin-bottom: 7px;
+  font-size: 12px;
+  font-weight: 800;
+  color: #52616b;
+}
+.hold-hand-options {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.hold-hand-options input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+.hold-hand-options label {
+  min-height: 50px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  border-radius: 14px;
+  background: #eef2f3;
+  color: #26343b;
+  font-weight: 800;
+  box-shadow: inset 0 0 0 2px transparent;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.hold-hand-options input:checked + label {
+  background: #e4f4e8;
+  color: #176033;
+  box-shadow: inset 0 0 0 2px #2a9150;
+}
+.hold-hand-note {
+  display: block;
+  margin-top: 6px;
+  font-size: 10px;
+  line-height: 1.35;
+  color: #7a878d;
+}
+
+/* The two calibration controls always sit under the thumb of the hand
+   holding the phone. The camera preview moves to the opposite side. */
+#app.hold-right .bottom-controls {
+  left: auto;
+  right: max(18px, env(safe-area-inset-right));
+  top: 58%;
+  transform: translateY(-50%);
+  width: min(178px, 43vw);
+  align-items: stretch;
+}
+#app.hold-left .bottom-controls {
+  right: auto;
+  left: max(18px, env(safe-area-inset-left));
+  top: 58%;
+  transform: translateY(-50%);
+  width: min(178px, 43vw);
+  align-items: stretch;
+}
+#app.hold-right #handPreview {
+  right: auto;
+  left: max(12px, env(safe-area-inset-left));
+}
+#app.hold-left #handPreview {
+  left: auto;
+  right: max(12px, env(safe-area-inset-right));
+}
+#app.hold-right .bottom-controls button,
+#app.hold-left .bottom-controls button {
+  min-height: 56px;
+  padding: 0 16px;
+  font-size: 14px;
+  line-height: 1.15;
+  touch-action: manipulation;
+}
+#app.hold-right #calibrateBtn,
+#app.hold-left #calibrateBtn {
+  min-height: 52px;
+}
+
+@media (max-width: 420px) {
+  #app.hold-right .bottom-controls,
+  #app.hold-left .bottom-controls {
+    width: min(164px, 45vw);
+    top: 60%;
+  }
+  #app.hold-right .bottom-controls button,
+  #app.hold-left .bottom-controls button {
+    min-height: 54px;
+    padding: 0 13px;
+  }
+}
+
+@media (orientation: landscape) and (max-height: 500px) {
+  #app.hold-right .bottom-controls,
+  #app.hold-left .bottom-controls {
+    top: 58%;
+    width: min(160px, 27vw);
+    gap: 7px;
+  }
+  #app.hold-right .bottom-controls button,
+  #app.hold-left .bottom-controls button {
+    min-height: 46px;
+    font-size: 12px;
+  }
+}
