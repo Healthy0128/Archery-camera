@@ -20,12 +20,13 @@ const CONFIG={
   gyro:{
     yawSensitivity:.38,
     pitchSensitivity:.34,
-    rollAssist:.035,
     fullDrawMultiplier:.58,
     deadzoneDeg:.8,
     smoothingHz:5.2,
     maxYaw:1.05,
-    maxPitch:.62
+    maxPitch:.62,
+    yawSign:-1,
+    pitchSign:-1
   },
   hand:{
     fullDrawShrink:.35,
@@ -51,46 +52,72 @@ class GyroInput{
   constructor(){
     this.enabled=false;
     this.seen=false;
-    this.raw={alpha:0,beta:0,gamma:0};
-    this.base={alpha:0,beta:0,gamma:0};
     this.targetYaw=0;
     this.targetPitch=0;
     this.yaw=0;
     this.pitch=0;
+    this.currentQuaternion=new THREE.Quaternion();
+    this.baseQuaternion=new THREE.Quaternion();
+    this.relativeQuaternion=new THREE.Quaternion();
+    this.deviceEuler=new THREE.Euler();
+    this.relativeEuler=new THREE.Euler();
+    this.screenQuaternion=new THREE.Quaternion();
+    this.zee=new THREE.Vector3(0,0,1);
+    this.screenFix=new THREE.Quaternion(-Math.sqrt(.5),0,0,Math.sqrt(.5));
     window.addEventListener('deviceorientation',e=>this.onOrientation(e),{passive:true});
   }
-  static angleDiff(a,b){ return (a-b+540)%360-180; }
-  static deadzone(v,dz){
+  static deadzoneRad(v,dzDeg){
+    const dz=THREE.MathUtils.degToRad(dzDeg);
     const a=Math.abs(v);
     if(a<=dz) return 0;
     return Math.sign(v)*(a-dz);
   }
+  getScreenAngle(){
+    const angle=screen.orientation?.angle;
+    if(Number.isFinite(angle)) return angle;
+    return Number(window.orientation)||0;
+  }
+  buildDeviceQuaternion(event){
+    const alpha=THREE.MathUtils.degToRad(event.alpha||0);
+    const beta=THREE.MathUtils.degToRad(event.beta||0);
+    const gamma=THREE.MathUtils.degToRad(event.gamma||0);
+    const orient=THREE.MathUtils.degToRad(this.getScreenAngle());
+
+    // DeviceOrientation -> camera-style portrait quaternion.
+    // This follows the same axis conversion used by Three.js DeviceOrientationControls:
+    // beta = device X, alpha = device Z, gamma = device Y, then compensate for portrait screen orientation.
+    this.deviceEuler.set(beta,alpha,-gamma,'YXZ');
+    this.currentQuaternion.setFromEuler(this.deviceEuler);
+    this.currentQuaternion.multiply(this.screenFix);
+    this.screenQuaternion.setFromAxisAngle(this.zee,-orient);
+    this.currentQuaternion.multiply(this.screenQuaternion);
+    return this.currentQuaternion;
+  }
   calibrate(){
-    this.base={...this.raw};
+    if(this.seen) this.baseQuaternion.copy(this.currentQuaternion);
     this.targetYaw=this.yaw=0;
     this.targetPitch=this.pitch=0;
     showMessage('照準リセット',500);
   }
-  onOrientation(e){
-    if(e.alpha==null) return;
-    this.raw={alpha:e.alpha||0,beta:e.beta||0,gamma:e.gamma||0};
-    if(!this.seen){ this.seen=true; this.base={...this.raw}; }
+  onOrientation(event){
+    if(event.alpha==null) return;
+    this.buildDeviceQuaternion(event);
+    if(!this.seen){
+      this.seen=true;
+      this.baseQuaternion.copy(this.currentQuaternion);
+    }
     if(!this.enabled) return;
 
-    let yawDeg=GyroInput.angleDiff(this.raw.alpha,this.base.alpha);
-    let pitchDeg=this.raw.beta-this.base.beta;
-    let rollDeg=this.raw.gamma-this.base.gamma;
-    yawDeg=GyroInput.deadzone(yawDeg,CONFIG.gyro.deadzoneDeg);
-    pitchDeg=GyroInput.deadzone(pitchDeg,CONFIG.gyro.deadzoneDeg);
-    rollDeg=GyroInput.deadzone(rollDeg,CONFIG.gyro.deadzoneDeg*1.4);
+    // Relative pose = movement away from the calibrated phone pose.
+    this.relativeQuaternion.copy(this.baseQuaternion).invert().multiply(this.currentQuaternion);
+    this.relativeEuler.setFromQuaternion(this.relativeQuaternion,'YXZ');
 
+    let pitch=GyroInput.deadzoneRad(this.relativeEuler.x,CONFIG.gyro.deadzoneDeg);
+    let yaw=GyroInput.deadzoneRad(this.relativeEuler.y,CONFIG.gyro.deadzoneDeg);
     const precision=lerp(1,CONFIG.gyro.fullDrawMultiplier,drawPower);
-    const yawRad=THREE.MathUtils.degToRad(yawDeg);
-    const pitchRad=THREE.MathUtils.degToRad(pitchDeg);
-    const rollRad=THREE.MathUtils.degToRad(rollDeg);
 
-    this.targetYaw=clamp((-yawRad*CONFIG.gyro.yawSensitivity + rollRad*CONFIG.gyro.rollAssist)*precision,-CONFIG.gyro.maxYaw,CONFIG.gyro.maxYaw);
-    this.targetPitch=clamp(pitchRad*CONFIG.gyro.pitchSensitivity*precision,-CONFIG.gyro.maxPitch,CONFIG.gyro.maxPitch);
+    this.targetYaw=clamp(yaw*CONFIG.gyro.yawSensitivity*CONFIG.gyro.yawSign*precision,-CONFIG.gyro.maxYaw,CONFIG.gyro.maxYaw);
+    this.targetPitch=clamp(pitch*CONFIG.gyro.pitchSensitivity*CONFIG.gyro.pitchSign*precision,-CONFIG.gyro.maxPitch,CONFIG.gyro.maxPitch);
   }
   update(dt){
     const k=1-Math.exp(-CONFIG.gyro.smoothingHz*dt);
@@ -158,18 +185,12 @@ class HandInput{
   }
   computePower(sample){
     if(!this.baseline) return 0;
-
-    // Main signal: how tightly all 21 landmarks cluster compared with the baseline pose.
-    // A hand farther from the front camera appears smaller, so the point cloud contracts.
     const shrink=1-sample.spread/Math.max(this.baseline.spread,.0001);
     const shrinkScore=clamp(shrink/CONFIG.hand.fullDrawShrink,0,1);
-
-    // Small position component remains only as a helper when perspective scaling is weak.
     const baseOut=Math.abs(this.baseline.x-.5);
     const nowOut=Math.abs(sample.x-.5);
     const positionScore=clamp(Math.max(0,nowOut-baseOut)/.28,0,1);
     const verticalPenalty=clamp(Math.abs(sample.y-this.baseline.y)/.35,0,.25);
-
     return clamp(shrinkScore*CONFIG.hand.shrinkWeight + positionScore*CONFIG.hand.positionWeight - verticalPenalty*CONFIG.hand.verticalPenalty,0,1);
   }
   drawLandmarks(lm){
@@ -331,7 +352,7 @@ function fire(){
   camera.getWorldDirection(forward); const velocity=forward.clone().multiplyScalar(15+power*23); scene.add(mesh);
   const shot={mesh,velocity,life:0,scored:false}; arrows.push(shot); releaseKick=1; fullDrawHold=0; cinematic={shot,phase:'launch',time:0,points:0};
   if(navigator.vibrate)navigator.vibrate(18);
-  if(hand.enabled){hand.baseline=hand.lastSample?{...hand.lastSample}:hand.baseline;hand.power=hand.targetPower=0;}
+  if(hand.enabled){hand.power=hand.targetPower=0;}
 }
 
 function updateArrows(dt){
