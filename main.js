@@ -22,7 +22,7 @@ const CONFIG={
   gyro:{
     yawSensitivity:.38,pitchSensitivity:.34,fullDrawMultiplier:.58,deadzoneDeg:.8,smoothingHz:5.2,
     maxYaw:1.05,maxPitch:.62,yawSign:1,pitchSign:1,
-    fatigueStartSec:1.0,fatigueRampSec:2.8,fatigueMaxMultiplier:1.7
+    fatigueStartSec:.7,fatigueRampSec:2.2,fatigueMaxMultiplier:2.15
   },
   hand:{
     drawStartShrink:.12,fullDrawShrink:.42,shrinkWeight:.9,positionWeight:.1,verticalPenalty:.04,smoothingHz:8,
