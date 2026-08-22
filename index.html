@@ -6,9 +6,10 @@
   <meta name="theme-color" content="#9ed8ff" />
   <title>Gyro Archery</title>
   <link rel="stylesheet" href="styles.css" />
+  <link rel="stylesheet" href="ergonomics.css" />
 </head>
 <body>
-  <main id="app">
+  <main id="app" class="hold-right">
     <canvas id="game"></canvas>
 
     <section id="hud" aria-label="ゲーム情報">
@@ -56,11 +57,22 @@
               <option value="35">35m</option>
             </select>
           </label>
+
+          <fieldset class="hold-hand-field">
+            <legend>スマホを持つ手</legend>
+            <div class="hold-hand-options">
+              <input id="phoneHandLeft" type="radio" name="phoneHand" value="left" />
+              <label for="phoneHandLeft">🤚 左手持ち</label>
+              <input id="phoneHandRight" type="radio" name="phoneHand" value="right" checked />
+              <label for="phoneHandRight">右手持ち ✋</label>
+            </div>
+            <span class="hold-hand-note">操作ボタンは持つ手側、手認識プレビューは反対側に移動します。</span>
+          </fieldset>
         </div>
 
         <button id="startBtn" type="button">ジャイロ＋手認識で開始</button>
         <button id="mouseBtn" class="secondary" type="button">カメラなしで試す</button>
-        <small>1人5射。1射ごとに交代し、風向きと風速も変化します。iPhoneでは開始時にモーションとカメラの許可が必要です。</small>
+        <small>1人5射。🤏で弦をつまみ、引いたあと指を開くと発射。画面タップでも撃てます。1射ごとに交代し、風向きと風速も変化します。</small>
       </div>
     </section>
 
@@ -89,6 +101,7 @@
     <button id="soundBtn" class="floating sound" type="button">♪</button>
   </main>
 
+  <script type="module" src="ergonomics.js"></script>
   <script type="module" src="main.js"></script>
 </body>
 </html>

@@ -23,7 +23,10 @@ const CONFIG={
     yawSensitivity:.38,pitchSensitivity:.34,fullDrawMultiplier:.58,deadzoneDeg:.8,smoothingHz:5.2,
     maxYaw:1.05,maxPitch:.62,yawSign:1,pitchSign:1
   },
-  hand:{fullDrawShrink:.35,shrinkWeight:.88,positionWeight:.12,verticalPenalty:.04,smoothingHz:8},
+  hand:{
+    fullDrawShrink:.35,shrinkWeight:.88,positionWeight:.12,verticalPenalty:.04,smoothingHz:8,
+    pinchCloseRatio:.42,pinchOpenRatio:.72,pinchReleaseJump:.16,minReleasePower:.38,pinchHoldMs:140
+  },
   physics:{minArrowSpeed:24,maxArrowSpeed:62,gravity:4.2,windAcceleration:.55},
   shotsPerPlayer:5,
   baseFov:58,
@@ -102,6 +105,7 @@ class HandInput{
     this.enabled=false;this.ready=false;this.detected=false;this.landmarker=null;this.stream=null;
     this.lastVideoTime=-1;this.lastInference=0;this.lastSample=null;this.baseline=null;
     this.power=0;this.targetPower=0;this.ctx=ui.handOverlay.getContext('2d');
+    this.pinchHeld=false;this.pinchStart=0;this.releaseArmed=false;this.lastPinchRatio=null;this.onRelease=null;
   }
   async init(){
     if(this.ready)return;
@@ -133,6 +137,34 @@ class HandInput{
     const verticalPenalty=clamp(Math.abs(sample.y-this.baseline.y)/.35,0,.25);
     return clamp(shrinkScore*CONFIG.hand.shrinkWeight+positionScore*CONFIG.hand.positionWeight-verticalPenalty*CONFIG.hand.verticalPenalty,0,1);
   }
+  pinchRatio(lm){
+    const tipDistance=Math.hypot(lm[4].x-lm[8].x,lm[4].y-lm[8].y);
+    const palmWidth=Math.max(Math.hypot(lm[5].x-lm[17].x,lm[5].y-lm[17].y),.0001);
+    return tipDistance/palmWidth;
+  }
+  updateReleaseGesture(lm,now){
+    const ratio=this.pinchRatio(lm);
+    const close=ratio<=CONFIG.hand.pinchCloseRatio;
+    const open=ratio>=CONFIG.hand.pinchOpenRatio;
+    const jump=this.lastPinchRatio==null?0:ratio-this.lastPinchRatio;
+    const releasePower=Math.max(this.power,this.targetPower);
+
+    if(close){
+      if(!this.pinchHeld){this.pinchHeld=true;this.pinchStart=now;this.releaseArmed=false;}
+      if(now-this.pinchStart>=CONFIG.hand.pinchHoldMs&&releasePower>=CONFIG.hand.minReleasePower){
+        this.releaseArmed=true;
+      }
+    }else if(this.pinchHeld){
+      if(this.releaseArmed&&open&&jump>=CONFIG.hand.pinchReleaseJump){
+        this.pinchHeld=false;this.releaseArmed=false;this.lastPinchRatio=ratio;
+        this.onRelease?.(releasePower);
+        return {ratio,released:true,armed:false};
+      }
+      if(open){this.pinchHeld=false;this.releaseArmed=false;}
+    }
+    this.lastPinchRatio=ratio;
+    return {ratio,released:false,armed:this.releaseArmed};
+  }
   drawLandmarks(lm){
     const ctx=this.ctx,w=ui.handOverlay.width,h=ui.handOverlay.height;ctx.clearRect(0,0,w,h);if(!lm)return;
     const links=[[0,1],[1,2],[2,3],[3,4],[0,5],[5,6],[6,7],[7,8],[5,9],[9,10],[10,11],[11,12],[9,13],[13,14],[14,15],[15,16],[13,17],[17,18],[18,19],[19,20],[0,17]];
@@ -148,19 +180,25 @@ class HandInput{
     const lm=result.landmarks?.[0];this.detected=!!lm;
     if(!lm){this.lastSample=null;this.targetPower=0;this.drawLandmarks(null);ui.handStatus.textContent='手をカメラに見せてください';return;}
     const center=landmarkCenter(lm);this.lastSample={x:center.x,y:center.y,spread:landmarkSpread(lm,center)};
-    if(!this.baseline){this.targetPower=0;ui.handStatus.textContent='構え位置で「手の基準」を押す';}
-    else{
+    if(!this.baseline){
+      this.targetPower=0;this.pinchHeld=false;this.releaseArmed=false;this.lastPinchRatio=null;
+      ui.handStatus.textContent='構え位置で「手の基準」を押す';
+    }else{
       this.targetPower=this.computePower(this.lastSample);
+      const gesture=this.updateReleaseGesture(lm,now);
       const shrinkPct=Math.max(0,Math.round((1-this.lastSample.spread/this.baseline.spread)*100));
-      ui.handStatus.textContent=this.targetPower>.86?`フルドロー！ 手サイズ -${shrinkPct}%`:this.targetPower>.35?`引き ${Math.round(this.targetPower*100)}% 手サイズ -${shrinkPct}%`:'手を奥へ引こう';
+      if(gesture.armed)ui.handStatus.textContent=`🤏 離すと発射 ・ 引き ${Math.round(Math.max(this.power,this.targetPower)*100)}%`;
+      else if(this.pinchHeld)ui.handStatus.textContent=`🤏 弦をつかんだ ・ 手サイズ -${shrinkPct}%`;
+      else ui.handStatus.textContent=this.targetPower>.86?`フルドロー！ 🤏でつまんで離す`:this.targetPower>.35?`引き ${Math.round(this.targetPower*100)}% ・ 🤏でつまむ`:'手を奥へ引こう';
     }
     this.drawLandmarks(lm);
   }
   updatePower(dt){
     const k=1-Math.exp(-CONFIG.hand.smoothingHz*dt);this.power+=(this.targetPower-this.power)*k;
   }
-  resetForTurn(){this.power=this.targetPower=0;}
-  resetMatch(){this.baseline=null;this.power=this.targetPower=0;}
+  resetGesture(){this.pinchHeld=false;this.pinchStart=0;this.releaseArmed=false;this.lastPinchRatio=null;}
+  resetForTurn(){this.power=this.targetPower=0;this.resetGesture();}
+  resetMatch(){this.baseline=null;this.power=this.targetPower=0;this.resetGesture();}
 }
 
 class Match{
@@ -279,11 +317,11 @@ const arrows=[],stuck=[],forward=new THREE.Vector3(),tmpQuat=new THREE.Quaternio
 function orientArrow(mesh,vel){tmpQuat.setFromUnitVectors(new THREE.Vector3(0,0,-1),vel.clone().normalize());mesh.quaternion.copy(tmpQuat);}
 function pointsFor(x,y){const r=Math.hypot(x,y);return r<=.2?10:r<=.52?9:r<=.8?8:r<=1.08?6:r<=1.35?4:r<=1.65?2:0;}
 
-function fire(){
+function fire(powerOverride=null){
   if(!running||turnLocked||cinematic)return;
   if(hand.enabled&&!hand.baseline){showMessage('先に手の基準を登録',850);return;}
   if(hand.enabled&&!hand.detected){showMessage('手が見えていません',700);return;}
-  const power=hand.enabled?Math.max(.1,drawPower):.82;turnLocked=true;audio.shoot();
+  const power=hand.enabled?Math.max(.1,powerOverride??drawPower):.82;turnLocked=true;audio.shoot();
   const mesh=makeArrow();camera.getWorldPosition(mesh.position);mesh.position.add(new THREE.Vector3(0,-.08,-.35).applyQuaternion(camera.quaternion));camera.getWorldDirection(forward);
   const speed=lerp(CONFIG.physics.minArrowSpeed,CONFIG.physics.maxArrowSpeed,power),velocity=forward.clone().multiplyScalar(speed);scene.add(mesh);
   const shot={mesh,velocity,life:0,scored:false};arrows.push(shot);releaseKick=1;fullDrawHold=0;cinematic={shot,phase:'launch',time:0,points:null};
@@ -380,6 +418,7 @@ ui.calibrateBtn.addEventListener('click',e=>{e.stopPropagation();gyro.calibrate(
 ui.handCalibrateBtn.addEventListener('click',e=>{e.stopPropagation();hand.registerBaseline();});
 ui.soundBtn.addEventListener('click',e=>{e.stopPropagation();soundOn=!soundOn;ui.soundBtn.textContent=soundOn?'♪':'×';if(soundOn&&running)audio.start();else audio.stop();});
 ui.restartBtn.addEventListener('click',e=>{e.stopPropagation();resetMatch();if(soundOn)audio.start();});
+hand.onRelease=power=>{if(running&&!turnLocked&&!cinematic)fire(power);};
 canvas.addEventListener('pointerdown',e=>{if(running){e.preventDefault();fire();}});
 window.addEventListener('mousemove',e=>{if(!running||!mouseMode)return;gyro.targetYaw=clamp((e.clientX/innerWidth-.5)*1.15,-1.05,1.05);gyro.targetPitch=clamp((.5-e.clientY/innerHeight)*.68,-.62,.62);},{passive:true});
 
