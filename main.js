@@ -25,8 +25,9 @@ const CONFIG={
     smoothingHz:5.2,
     maxYaw:1.05,
     maxPitch:.62,
-    yawSign:-1,
-    pitchSign:-1
+    // Portrait iPhone directions after quaternion conversion.
+    yawSign:1,
+    pitchSign:1
   },
   hand:{
     fullDrawShrink:.35,
@@ -34,6 +35,12 @@ const CONFIG={
     positionWeight:.12,
     verticalPenalty:.04,
     smoothingHz:8
+  },
+  physics:{
+    minArrowSpeed:24,
+    maxArrowSpeed:62,
+    gravity:4.2,
+    windAcceleration:.11
   },
   arrowsPerRound:10,
   targetZ:-25,
@@ -83,9 +90,6 @@ class GyroInput{
     const gamma=THREE.MathUtils.degToRad(event.gamma||0);
     const orient=THREE.MathUtils.degToRad(this.getScreenAngle());
 
-    // DeviceOrientation -> camera-style portrait quaternion.
-    // This follows the same axis conversion used by Three.js DeviceOrientationControls:
-    // beta = device X, alpha = device Z, gamma = device Y, then compensate for portrait screen orientation.
     this.deviceEuler.set(beta,alpha,-gamma,'YXZ');
     this.currentQuaternion.setFromEuler(this.deviceEuler);
     this.currentQuaternion.multiply(this.screenFix);
@@ -108,7 +112,6 @@ class GyroInput{
     }
     if(!this.enabled) return;
 
-    // Relative pose = movement away from the calibrated phone pose.
     this.relativeQuaternion.copy(this.baseQuaternion).invert().multiply(this.currentQuaternion);
     this.relativeEuler.setFromQuaternion(this.relativeQuaternion,'YXZ');
 
@@ -349,7 +352,10 @@ function fire(){
   const power=hand.enabled?Math.max(.1,drawPower):.82;
   arrowsLeft--; updateHud(); audio.shoot();
   const mesh=makeArrow(); camera.getWorldPosition(mesh.position); mesh.position.add(new THREE.Vector3(0,-.08,-.35).applyQuaternion(camera.quaternion));
-  camera.getWorldDirection(forward); const velocity=forward.clone().multiplyScalar(15+power*23); scene.add(mesh);
+  camera.getWorldDirection(forward);
+  const speed=lerp(CONFIG.physics.minArrowSpeed,CONFIG.physics.maxArrowSpeed,power);
+  const velocity=forward.clone().multiplyScalar(speed);
+  scene.add(mesh);
   const shot={mesh,velocity,life:0,scored:false}; arrows.push(shot); releaseKick=1; fullDrawHold=0; cinematic={shot,phase:'launch',time:0,points:0};
   if(navigator.vibrate)navigator.vibrate(18);
   if(hand.enabled){hand.power=hand.targetPower=0;}
@@ -358,7 +364,9 @@ function fire(){
 function updateArrows(dt){
   for(let i=arrows.length-1;i>=0;i--){
     const a=arrows[i]; a.life+=dt; const prevZ=a.mesh.position.z;
-    a.velocity.y-=9.81*dt; a.velocity.x+=wind*.11*dt; a.mesh.position.addScaledVector(a.velocity,dt); orientArrow(a.mesh,a.velocity);
+    a.velocity.y-=CONFIG.physics.gravity*dt;
+    a.velocity.x+=wind*CONFIG.physics.windAcceleration*dt;
+    a.mesh.position.addScaledVector(a.velocity,dt); orientArrow(a.mesh,a.velocity);
     if(!a.scored&&prevZ>CONFIG.targetZ+.12&&a.mesh.position.z<=CONFIG.targetZ+.12){
       a.scored=true; const x=a.mesh.position.x-target.position.x,y=a.mesh.position.y-target.position.y,pts=pointsFor(x,y);
       if(Math.hypot(x,y)<=1.68){
