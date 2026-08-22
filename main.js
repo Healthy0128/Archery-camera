@@ -21,7 +21,8 @@ const ui={
 const CONFIG={
   gyro:{
     yawSensitivity:.38,pitchSensitivity:.34,fullDrawMultiplier:.58,deadzoneDeg:.8,smoothingHz:5.2,
-    maxYaw:1.05,maxPitch:.62,yawSign:1,pitchSign:1
+    maxYaw:1.05,maxPitch:.62,yawSign:1,pitchSign:1,
+    fatigueStartSec:1.0,fatigueRampSec:2.8,fatigueMaxMultiplier:1.7
   },
   hand:{
     drawStartShrink:.12,fullDrawShrink:.42,shrinkWeight:.9,positionWeight:.1,verticalPenalty:.04,smoothingHz:8,
@@ -82,7 +83,9 @@ class GyroInput{
     this.relativeEuler.setFromQuaternion(this.relativeQuaternion,'YXZ');
     const pitch=GyroInput.deadzoneRad(this.relativeEuler.x,CONFIG.gyro.deadzoneDeg);
     const yaw=GyroInput.deadzoneRad(this.relativeEuler.y,CONFIG.gyro.deadzoneDeg);
-    const precision=lerp(1,CONFIG.gyro.fullDrawMultiplier,drawPower);
+    const fatigueProgress=drawPower>.86?clamp((fullDrawHold-CONFIG.gyro.fatigueStartSec)/CONFIG.gyro.fatigueRampSec,0,1):0;
+    const fatigue=lerp(1,CONFIG.gyro.fatigueMaxMultiplier,fatigueProgress);
+    const precision=lerp(1,CONFIG.gyro.fullDrawMultiplier,drawPower)*fatigue;
     this.targetYaw=clamp(yaw*CONFIG.gyro.yawSensitivity*CONFIG.gyro.yawSign*precision,-CONFIG.gyro.maxYaw,CONFIG.gyro.maxYaw);
     this.targetPitch=clamp(pitch*CONFIG.gyro.pitchSensitivity*CONFIG.gyro.pitchSign*precision,-CONFIG.gyro.maxPitch,CONFIG.gyro.maxPitch);
   }
@@ -98,6 +101,12 @@ function landmarkCenter(lm){
 }
 function landmarkSpread(lm,center=landmarkCenter(lm)){
   let sum=0;for(const p of lm){const dx=p.x-center.x,dy=p.y-center.y;sum+=dx*dx+dy*dy;}return Math.sqrt(sum/lm.length);
+}
+const DRAW_CORE_INDEXES=[0,5,9,13,17];
+function drawCoreSample(lm){
+  const core=DRAW_CORE_INDEXES.map(i=>lm[i]);
+  const center=landmarkCenter(core);
+  return{x:center.x,y:center.y,spread:landmarkSpread(core,center)};
 }
 
 class HandInput{
@@ -182,7 +191,7 @@ class HandInput{
     let result;try{result=this.landmarker.detectForVideo(ui.handVideo,now);}catch{ui.handStatus.textContent='手認識エラー';return;}
     const lm=result.landmarks?.[0];this.detected=!!lm;
     if(!lm){this.lastSample=null;this.targetPower=0;this.drawLandmarks(null);ui.handStatus.textContent=this.baseline?'手をカメラに戻してください':'① 引かずに手をカメラへ';return;}
-    const center=landmarkCenter(lm);this.lastSample={x:center.x,y:center.y,spread:landmarkSpread(lm,center)};
+    this.lastSample=drawCoreSample(lm);
     if(!this.baseline){
       this.targetPower=0;this.pinchHeld=false;this.releaseArmed=false;this.lastPinchRatio=null;
       ui.handStatus.textContent='② 今の自然な位置で「手の基準」を押す';
@@ -194,7 +203,7 @@ class HandInput{
       else if(this.pinchHeld)ui.handStatus.textContent=this.targetPower>=CONFIG.hand.minReleasePower?`🤏 弦をつかんだ ・ 離せる強さ`:`🤏 そのままもっと奥へ引く`;
       else if(this.targetPower>.86)ui.handStatus.textContent='フルドロー！ 🤏でつまんで離す';
       else if(this.targetPower>.05)ui.handStatus.textContent=`引き ${Math.round(this.targetPower*100)}% ・ もっとしっかり奥へ`;
-      else ui.handStatus.textContent=`まだ引き判定前 ・ 手サイズ -${shrinkPct}%`;
+      else ui.handStatus.textContent=`まだ引き判定前 ・ 手のひら -${shrinkPct}%`;
     }
     this.drawLandmarks(lm);
   }
@@ -438,8 +447,8 @@ window.addEventListener('resize',resize,{passive:true});resize();
 const clock=new THREE.Clock();
 function animate(now=performance.now()){
   requestAnimationFrame(animate);const dt=Math.min(clock.getDelta(),.033);gyro.update(dt);hand.updateTracking(now);updateDraw(dt);
-  const strain=clamp((fullDrawHold-1.5)/2.5,0,1),tremorYaw=(Math.sin(now*.021)+Math.sin(now*.037)*.55)*.0065*strain,tremorPitch=(Math.sin(now*.026+1.2)+Math.sin(now*.043)*.45)*.0055*strain;
-  if(!cinematic){camera.position.copy(HOME);releaseKick=Math.max(0,releaseKick-dt*7);const kick=-Math.sin((1-releaseKick)*Math.PI)*.018*releaseKick;aimEuler.set(gyro.pitch+tremorPitch+kick,gyro.yaw+tremorYaw,0,'YXZ');camera.quaternion.setFromEuler(aimEuler);bow.position.x=-.72+Math.sin(now*.0015)*.006+Math.sin(now*.048)*.008*strain;bow.position.y=-.55+Math.sin(now*.041)*.005*strain;}
+  const strain=clamp((fullDrawHold-1.5)/2.5,0,1);
+  if(!cinematic){camera.position.copy(HOME);releaseKick=Math.max(0,releaseKick-dt*7);const kick=-Math.sin((1-releaseKick)*Math.PI)*.018*releaseKick;aimEuler.set(gyro.pitch+kick,gyro.yaw,0,'YXZ');camera.quaternion.setFromEuler(aimEuler);bow.position.x=-.72+Math.sin(now*.0015)*.006+Math.sin(now*.048)*.004*strain;bow.position.y=-.55+Math.sin(now*.041)*.0025*strain;}
   updateArrows(cinematic?.phase==='impact'?dt*.18:dt);updateCinematic(dt);updateWind(now);renderer.render(scene,camera);
 }
 match.configure(1,25);applyDistance(25);updateHud();setWind();animate();
