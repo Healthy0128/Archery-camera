@@ -24,8 +24,8 @@ const CONFIG={
     maxYaw:1.05,maxPitch:.62,yawSign:1,pitchSign:1
   },
   hand:{
-    fullDrawShrink:.35,shrinkWeight:.88,positionWeight:.12,verticalPenalty:.04,smoothingHz:8,
-    pinchCloseRatio:.42,pinchOpenRatio:.72,pinchReleaseJump:.16,minReleasePower:.38,pinchHoldMs:140
+    drawStartShrink:.12,fullDrawShrink:.42,shrinkWeight:.9,positionWeight:.1,verticalPenalty:.04,smoothingHz:8,
+    pinchCloseRatio:.42,pinchOpenRatio:.72,pinchReleaseJump:.16,minReleasePower:.55,pinchHoldMs:140
   },
   physics:{minArrowSpeed:24,maxArrowSpeed:62,gravity:4.2,windAcceleration:.55},
   shotsPerPlayer:5,
@@ -124,14 +124,17 @@ class HandInput{
     ui.handOverlay.width=ui.handVideo.videoWidth||320;ui.handOverlay.height=ui.handVideo.videoHeight||240;
   }
   registerBaseline(){
-    if(!this.lastSample){showMessage('手が見えていません',900);return false;}
-    this.baseline={...this.lastSample};this.power=this.targetPower=0;
-    ui.handStatus.textContent='基準登録OK。手を奥へ引こう';showMessage('手の基準を登録',700);return true;
+    if(!this.lastSample){showMessage('手をカメラに映してから登録',1100);return false;}
+    this.baseline={...this.lastSample};this.power=this.targetPower=0;this.resetGesture();
+    ui.handCalibrateBtn.textContent='手の基準を再登録';
+    ui.handStatus.textContent='登録完了。ここから手を奥へしっかり引く';
+    showMessage('基準登録OK！ ここから手を奥へ引こう',1600);return true;
   }
   computePower(sample){
     if(!this.baseline)return 0;
     const shrink=1-sample.spread/Math.max(this.baseline.spread,.0001);
-    const shrinkScore=clamp(shrink/CONFIG.hand.fullDrawShrink,0,1);
+    if(shrink<=CONFIG.hand.drawStartShrink)return 0;
+    const shrinkScore=clamp((shrink-CONFIG.hand.drawStartShrink)/(CONFIG.hand.fullDrawShrink-CONFIG.hand.drawStartShrink),0,1);
     const baseOut=Math.abs(this.baseline.x-.5),nowOut=Math.abs(sample.x-.5);
     const positionScore=clamp(Math.max(0,nowOut-baseOut)/.28,0,1);
     const verticalPenalty=clamp(Math.abs(sample.y-this.baseline.y)/.35,0,.25);
@@ -178,18 +181,20 @@ class HandInput{
     this.lastInference=now;this.lastVideoTime=ui.handVideo.currentTime;
     let result;try{result=this.landmarker.detectForVideo(ui.handVideo,now);}catch{ui.handStatus.textContent='手認識エラー';return;}
     const lm=result.landmarks?.[0];this.detected=!!lm;
-    if(!lm){this.lastSample=null;this.targetPower=0;this.drawLandmarks(null);ui.handStatus.textContent='手をカメラに見せてください';return;}
+    if(!lm){this.lastSample=null;this.targetPower=0;this.drawLandmarks(null);ui.handStatus.textContent=this.baseline?'手をカメラに戻してください':'① 引かずに手をカメラへ';return;}
     const center=landmarkCenter(lm);this.lastSample={x:center.x,y:center.y,spread:landmarkSpread(lm,center)};
     if(!this.baseline){
       this.targetPower=0;this.pinchHeld=false;this.releaseArmed=false;this.lastPinchRatio=null;
-      ui.handStatus.textContent='構え位置で「手の基準」を押す';
+      ui.handStatus.textContent='② 今の自然な位置で「手の基準」を押す';
     }else{
       this.targetPower=this.computePower(this.lastSample);
       const gesture=this.updateReleaseGesture(lm,now);
       const shrinkPct=Math.max(0,Math.round((1-this.lastSample.spread/this.baseline.spread)*100));
       if(gesture.armed)ui.handStatus.textContent=`🤏 離すと発射 ・ 引き ${Math.round(Math.max(this.power,this.targetPower)*100)}%`;
-      else if(this.pinchHeld)ui.handStatus.textContent=`🤏 弦をつかんだ ・ 手サイズ -${shrinkPct}%`;
-      else ui.handStatus.textContent=this.targetPower>.86?`フルドロー！ 🤏でつまんで離す`:this.targetPower>.35?`引き ${Math.round(this.targetPower*100)}% ・ 🤏でつまむ`:'手を奥へ引こう';
+      else if(this.pinchHeld)ui.handStatus.textContent=this.targetPower>=CONFIG.hand.minReleasePower?`🤏 弦をつかんだ ・ 離せる強さ`:`🤏 そのままもっと奥へ引く`;
+      else if(this.targetPower>.86)ui.handStatus.textContent='フルドロー！ 🤏でつまんで離す';
+      else if(this.targetPower>.05)ui.handStatus.textContent=`引き ${Math.round(this.targetPower*100)}% ・ もっとしっかり奥へ`;
+      else ui.handStatus.textContent=`まだ引き判定前 ・ 手サイズ -${shrinkPct}%`;
     }
     this.drawLandmarks(lm);
   }
@@ -198,7 +203,7 @@ class HandInput{
   }
   resetGesture(){this.pinchHeld=false;this.pinchStart=0;this.releaseArmed=false;this.lastPinchRatio=null;}
   resetForTurn(){this.power=this.targetPower=0;this.resetGesture();}
-  resetMatch(){this.baseline=null;this.power=this.targetPower=0;this.resetGesture();}
+  resetMatch(){this.baseline=null;this.power=this.targetPower=0;this.resetGesture();ui.handCalibrateBtn.textContent='① 手の基準を登録';}
 }
 
 class Match{
@@ -290,13 +295,18 @@ function triggerBullseye(){ui.bullseye.classList.remove('fire');void ui.bullseye
 function showTurnPanel(first=false){
   turnLocked=true;running=false;hand.resetForTurn();gyro.calibrate();
   const p=match.current;ui.turnTitle.textContent=`${p.name} の番`;
-  ui.turnMeta.textContent=`${match.distance}m ・ ${CONFIG.shotsPerPlayer-p.shots.length}射残り ・ 風は開始時に決定`;
+  ui.turnMeta.textContent=hand.enabled&&!hand.baseline
+    ?`${match.distance}m ・ 最初に「手の基準」を登録`
+    :`${match.distance}m ・ ${CONFIG.shotsPerPlayer-p.shots.length}射残り ・ 風は開始時に決定`;
   ui.turnReadyBtn.textContent=first?'ゲーム開始':'準備OK';
   ui.turnPanel.classList.add('show');
 }
 function beginTurn(){
   ui.turnPanel.classList.remove('show');turnLocked=false;running=true;setWind();gyro.calibrate();hand.resetForTurn();updateHud();
-  showMessage(`${match.current.name}  ${match.distance}m`,700);
+  if(hand.enabled&&!hand.baseline){
+    ui.handCalibrateBtn.textContent='① 手の基準を登録';
+    showMessage('手を引かず自然な位置で映す →「手の基準」を押す',2600);
+  }else showMessage(`${match.current.name}  ${match.distance}m`,700);
 }
 function finishShot(points){
   match.record(points);updateHud();
@@ -319,7 +329,7 @@ function pointsFor(x,y){const r=Math.hypot(x,y);return r<=.2?10:r<=.52?9:r<=.8?8
 
 function fire(powerOverride=null){
   if(!running||turnLocked||cinematic)return;
-  if(hand.enabled&&!hand.baseline){showMessage('先に手の基準を登録',850);return;}
+  if(hand.enabled&&!hand.baseline){showMessage('まず「手の基準」を登録してね',1300);return;}
   if(hand.enabled&&!hand.detected){showMessage('手が見えていません',700);return;}
   const power=hand.enabled?Math.max(.1,powerOverride??drawPower):.82;turnLocked=true;audio.shoot();
   const mesh=makeArrow();camera.getWorldPosition(mesh.position);mesh.position.add(new THREE.Vector3(0,-.08,-.35).applyQuaternion(camera.quaternion));camera.getWorldDirection(forward);
