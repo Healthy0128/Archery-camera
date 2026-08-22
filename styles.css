@@ -38,8 +38,9 @@ button { appearance:none; border:0; border-radius:16px; min-height:48px; padding
 #startBtn { width:100%; background:#2a9150; color:white; box-shadow:0 6px 0 #176033; }
 #mouseBtn { width:100%; margin-top:12px; background:#eef2f3; color:#26343b; }
 small { display:block; margin-top:18px; color:#68757d; line-height:1.5; }
-.bottom-controls { position:absolute; z-index:7; bottom:max(14px, env(safe-area-inset-bottom)); left:12px; display:flex; gap:8px; }
+.bottom-controls { position:absolute; z-index:7; left:50%; top:60%; transform:translate(-50%,-50%); display:flex; flex-direction:column; align-items:center; gap:10px; width:min(190px,46vw); }
 .bottom-controls button, .floating { min-height:42px; border-radius:999px; background:rgba(255,255,255,.84); color:#243039; backdrop-filter:blur(10px); box-shadow:0 4px 14px rgba(0,0,0,.15); font-size:13px; }
+.bottom-controls button { width:100%; min-height:50px; padding:0 18px; }
 .floating.sound { position:absolute; z-index:7; bottom:max(14px, env(safe-area-inset-bottom)); right:14px; width:44px; padding:0; font-size:22px; }
 #reticle.full-draw { filter:drop-shadow(0 0 5px rgba(255,255,255,.95)); }
 #app::after { content:""; position:absolute; inset:0; pointer-events:none; z-index:2; opacity:calc(var(--draw-focus, 0) * .16); background:radial-gradient(circle at 50% 50%, transparent 35%, rgba(10,18,22,.5) 100%); transition:opacity .08s linear; }
@@ -76,11 +77,14 @@ small { display:block; margin-top:18px; color:#68757d; line-height:1.5; }
   #hud { top:8px; }
   .hud-card { padding:6px 9px; }
   #handPreview { top:62px; width:96px; }
-  .bottom-controls, .floating.sound { bottom:8px; }
+  .bottom-controls { top:58%; width:min(180px,30vw); gap:7px; }
+  .bottom-controls button { min-height:44px; }
+  .floating.sound { bottom:8px; }
 }
 @media (max-width:420px){
   .hud-card.wind { display:none; }
   #hud { gap:6px; }
+  .bottom-controls { width:min(176px,48vw); }
 }
 @media (prefers-reduced-motion: reduce){
   #bullseyeFx.fire, #bullseyeFx.fire::before, #bullseyeFx.fire span { animation-duration:.01ms; }
