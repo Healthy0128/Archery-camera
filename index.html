@@ -12,8 +12,10 @@
     <canvas id="game"></canvas>
 
     <section id="hud" aria-label="ゲーム情報">
+      <div class="hud-card"><span>プレイヤー</span><strong id="playerHud">P1/1</strong></div>
       <div class="hud-card"><span>スコア</span><strong id="score">0</strong></div>
-      <div class="hud-card"><span>矢</span><strong id="arrows">10</strong></div>
+      <div class="hud-card"><span>残り</span><strong id="arrows">5</strong></div>
+      <div class="hud-card distance"><span>距離</span><strong id="distanceHud">25m</strong></div>
       <div class="hud-card power"><span>引き</span><strong id="powerText">0%</strong><div class="power-track"><i id="powerFill"></i></div></div>
       <div class="hud-card combo" id="comboCard"><span>コンボ</span><strong id="combo">×1</strong></div>
       <div class="hud-card wind"><span>風</span><strong id="wind">0.0 m/s →</strong></div>
@@ -33,25 +35,50 @@
       <div class="panel-inner">
         <div class="logo">🏹</div>
         <h1>GYRO ARCHERY</h1>
-        <p>スマホを動かして狙い、空いている手を引いてパワーをため、画面タップで矢を放とう。</p>
+        <p>スマホを交代で持って、最大4人でアーチェリー対戦。</p>
+
+        <div class="setup-grid">
+          <label>
+            <span>人数</span>
+            <select id="playerCount">
+              <option value="1">1人</option>
+              <option value="2">2人</option>
+              <option value="3">3人</option>
+              <option value="4">4人</option>
+            </select>
+          </label>
+          <label>
+            <span>距離</span>
+            <select id="distanceSelect">
+              <option value="10">10m</option>
+              <option value="18">18m</option>
+              <option value="25" selected>25m</option>
+              <option value="35">35m</option>
+            </select>
+          </label>
+        </div>
+
         <button id="startBtn" type="button">ジャイロ＋手認識で開始</button>
         <button id="mouseBtn" class="secondary" type="button">カメラなしで試す</button>
-        <small>開始時に「モーションと方向」と「カメラ」の許可が必要です。インカメラ映像は端末内で手認識に使います。</small>
+        <small>1人5射。1射ごとに交代し、風向きと風速も変化します。iPhoneでは開始時にモーションとカメラの許可が必要です。</small>
+      </div>
+    </section>
+
+    <section id="turnPanel" class="turn-panel" aria-live="polite">
+      <div class="turn-card">
+        <div class="turn-kicker">PASS THE PHONE</div>
+        <h2 id="turnTitle">P1 の番</h2>
+        <p id="turnMeta">25m ・ 5射残り</p>
+        <button id="turnReadyBtn" type="button">準備OK</button>
       </div>
     </section>
 
     <section id="resultPanel" class="result-panel" aria-live="polite">
       <div class="result-inner">
-        <div class="result-kicker">10 ARROWS COMPLETE</div>
+        <div class="result-kicker">MATCH COMPLETE</div>
         <h2>RESULT</h2>
-        <div class="result-score"><span>合計</span><strong id="resultScore">0</strong><small> / 100</small></div>
-        <div class="result-grid">
-          <div><span>平均</span><b id="resultAvg">0.0</b></div>
-          <div><span>最高</span><b id="resultBest">0</b></div>
-          <div><span>10点</span><b id="resultTens">0</b></div>
-          <div><span>最高コンボ</span><b id="resultCombo">0</b></div>
-        </div>
-        <button id="restartBtn" type="button">もう一度</button>
+        <div id="resultList" class="result-list"></div>
+        <button id="restartBtn" type="button">同じ設定でもう一度</button>
       </div>
     </section>
 
