@@ -20,6 +20,20 @@ Power is estimated from:
 
 The result is smoothed into a 0–100% draw meter. Arrow launch speed changes with draw power.
 
+## Multiplayer calibration
+- Each player owns an independent palm-core baseline and phone-hand setting.
+- A baseline is registered only after a short stable-sample window and is restored on that player's next turn.
+- Tracking loss clears an armed pinch after a short grace period, preventing a late open hand from firing.
+- The optional guided practice arrow is excluded from match scores.
+
+## Code structure
+- `inputs.js`: gyroscope and MediaPipe hand input
+- `player-calibration.js`: per-player hand and phone-side data
+- `match.js`: turn order, scores and player ownership
+- `game-config.js`: distance-specific physics and input tuning
+- `tutorial.js`: guided practice state machine
+- `main.js`: Three.js scene, arrow lifecycle and UI orchestration
+
 ## Run
 Camera and motion sensors require a secure context on iPhone. Use GitHub Pages or another HTTPS host.
 

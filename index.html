@@ -32,6 +32,11 @@
       <div id="handStatus">カメラ準備中</div>
     </aside>
 
+    <section id="handCoach" class="hand-coach" aria-live="polite">
+      <span id="handStateDot" aria-hidden="true"></span>
+      <div><strong id="handStateLabel">未認識</strong><small id="handReason">手をカメラに映してください</small></div>
+    </section>
+
     <section id="startPanel" class="panel">
       <div class="panel-inner">
         <div class="logo">🏹</div>
@@ -68,6 +73,10 @@
             </div>
             <span class="hold-hand-note">操作ボタンは持つ手側、手認識プレビューは反対側に移動します。</span>
           </fieldset>
+          <label class="tutorial-option">
+            <input id="tutorialEnabled" type="checkbox" checked />
+            <span>最初に1本だけ試射する</span>
+          </label>
         </div>
 
         <button id="startBtn" type="button">ジャイロ＋手認識で開始</button>
@@ -81,7 +90,25 @@
         <div class="turn-kicker">PASS THE PHONE</div>
         <h2 id="turnTitle">P1 の番</h2>
         <p id="turnMeta">25m ・ 5射残り</p>
+        <fieldset id="turnHandSetup" class="turn-hand-setup" hidden>
+          <legend>このプレイヤーがスマホを持つ手</legend>
+          <div>
+            <button type="button" data-phone-hand="left">🤚 左手</button>
+            <button type="button" data-phone-hand="right">右手 ✋</button>
+          </div>
+        </fieldset>
         <button id="turnReadyBtn" type="button">準備OK</button>
+      </div>
+    </section>
+
+    <section id="tutorialPanel" class="tutorial-panel" aria-live="polite">
+      <div class="tutorial-card">
+        <div class="tutorial-kicker">QUICK PRACTICE</div>
+        <h2 id="tutorialTitle">1 / 6　スマホを構える</h2>
+        <p id="tutorialText"></p>
+        <div id="tutorialHint" class="tutorial-hint"></div>
+        <button id="tutorialNext" type="button">次へ</button>
+        <button id="tutorialSkip" class="secondary" type="button">スキップして本番へ</button>
       </div>
     </section>
 
@@ -98,11 +125,10 @@
       <button id="handCalibrateBtn" type="button">手の基準</button>
       <button id="calibrateBtn" type="button">照準リセット</button>
     </div>
+    <button id="menuBtn" type="button" hidden>☰ メニュー</button>
     <button id="soundBtn" class="floating sound" type="button">♪</button>
   </main>
 
-  <script type="module" src="ergonomics.js"></script>
-  <script type="module" src="menu.js"></script>
   <script type="module" src="main.js"></script>
 </body>
 </html>

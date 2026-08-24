@@ -10,9 +10,9 @@ body { touch-action:none; user-select:none; -webkit-user-select:none; }
 
 #hud {
   position:absolute;
-  top:max(12px, env(safe-area-inset-top));
-  left:12px;
-  right:12px;
+  top:max(12px, calc(env(safe-area-inset-top) + 8px));
+  left:max(12px, env(safe-area-inset-left));
+  right:max(12px, env(safe-area-inset-right));
   display:flex;
   gap:7px;
   pointer-events:none;
@@ -80,10 +80,46 @@ button { appearance:none; border:0; border-radius:16px; min-height:48px; padding
 #mouseBtn { width:100%; margin-top:12px; background:#eef2f3; color:#26343b; }
 small { display:block; margin-top:18px; color:#68757d; line-height:1.5; }
 
+.tutorial-option { grid-column:1 / -1; min-height:44px; padding:0 12px; border-radius:13px; background:#f2f6f4; display:flex !important; flex-direction:row !important; align-items:center; gap:10px !important; }
+.tutorial-option input { width:22px; height:22px; accent-color:#2a9150; }
+
+.hand-coach {
+  display:none;
+  position:absolute;
+  z-index:6;
+  top:calc(max(12px, env(safe-area-inset-top)) + 104px);
+  left:50%;
+  transform:translateX(-50%);
+  width:min(290px,52vw);
+  min-height:52px;
+  padding:8px 12px;
+  border-radius:16px;
+  background:rgba(20,31,37,.78);
+  color:white;
+  backdrop-filter:blur(10px);
+  align-items:center;
+  gap:9px;
+  pointer-events:none;
+}
+.hand-coach.active { display:flex; }
+.hand-coach span { width:12px; height:12px; flex:0 0 auto; border-radius:50%; background:#e15555; box-shadow:0 0 0 4px rgba(225,85,85,.2); }
+.hand-coach div { min-width:0; }
+.hand-coach strong, .hand-coach small { display:block; margin:0; }
+.hand-coach strong { font-size:12px; }
+.hand-coach small { margin-top:2px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:rgba(255,255,255,.82); font-size:10px; }
+.hand-coach[data-state="calibration-ready"] span,
+.hand-coach[data-state="registered"] span { background:#67d68b; box-shadow:0 0 0 4px rgba(103,214,139,.2); }
+.hand-coach[data-state="pinched"] span,
+.hand-coach[data-state="draw-low"] span { background:#f0b544; box-shadow:0 0 0 4px rgba(240,181,68,.2); }
+.hand-coach[data-state="ready"] span,
+.hand-coach[data-state="released"] span { background:#6be6ff; box-shadow:0 0 0 4px rgba(107,230,255,.25); }
+
 .bottom-controls { position:absolute; z-index:7; left:50%; top:60%; transform:translate(-50%,-50%); display:flex; flex-direction:column; align-items:center; gap:10px; width:min(190px,46vw); }
-.bottom-controls button, .floating { min-height:42px; border-radius:999px; background:rgba(255,255,255,.84); color:#243039; backdrop-filter:blur(10px); box-shadow:0 4px 14px rgba(0,0,0,.15); font-size:13px; }
+.bottom-controls button, .floating { min-height:44px; border-radius:999px; background:rgba(255,255,255,.84); color:#243039; backdrop-filter:blur(10px); box-shadow:0 4px 14px rgba(0,0,0,.15); font-size:13px; }
 .bottom-controls button { width:100%; min-height:50px; padding:0 18px; }
 .floating.sound { position:absolute; z-index:7; bottom:max(14px, env(safe-area-inset-bottom)); right:14px; width:44px; padding:0; font-size:22px; }
+#menuBtn { position:absolute; z-index:13; left:50%; bottom:max(14px, env(safe-area-inset-bottom)); transform:translateX(-50%); min-width:112px; min-height:46px; padding:0 18px; border-radius:999px; background:rgba(255,255,255,.88); color:#243039; backdrop-filter:blur(10px); box-shadow:0 4px 14px rgba(0,0,0,.18); font-size:13px; touch-action:manipulation; }
+#menuBtn[hidden] { display:none; }
 
 .turn-panel {
   display:none;
@@ -108,6 +144,35 @@ small { display:block; margin-top:18px; color:#68757d; line-height:1.5; }
 .turn-card h2 { margin:4px 0 8px; font-size:34px; color:#203138; }
 .turn-card p { margin-bottom:18px; }
 #turnReadyBtn { width:100%; background:#2a9150; color:white; box-shadow:0 6px 0 #176033; }
+#turnReadyBtn:disabled { opacity:.45; box-shadow:none; }
+.turn-hand-setup { margin:0 0 18px; padding:12px; border:1px solid rgba(30,44,52,.12); border-radius:16px; }
+.turn-hand-setup legend { padding:0 6px; font-size:12px; font-weight:800; color:#52616b; }
+.turn-hand-setup div { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+.turn-hand-setup button { min-height:48px; background:#eef2f3; color:#26343b; }
+.turn-hand-setup button.selected { color:#176033; background:#e4f4e8; box-shadow:inset 0 0 0 2px #2a9150; }
+
+.tutorial-panel { display:none; position:absolute; inset:0; z-index:10; pointer-events:none; }
+.tutorial-panel.show { display:block; }
+.tutorial-card {
+  position:absolute;
+  left:50%;
+  bottom:max(92px, calc(env(safe-area-inset-bottom) + 78px));
+  transform:translateX(-50%);
+  width:min(390px,84vw);
+  padding:18px;
+  border-radius:22px;
+  background:rgba(255,255,255,.96);
+  box-shadow:0 14px 44px rgba(0,0,0,.25);
+  pointer-events:auto;
+  text-align:center;
+}
+.tutorial-kicker { font-size:10px; letter-spacing:.15em; color:#6c7b83; font-weight:900; }
+.tutorial-card h2 { margin:3px 0 7px; font-size:20px; color:#203138; }
+.tutorial-card p { margin:0 0 10px; font-size:13px; line-height:1.45; }
+.tutorial-hint { min-height:34px; display:grid; place-items:center; margin-bottom:10px; padding:7px 10px; border-radius:12px; background:#edf5ef; color:#176033; font-size:12px; font-weight:800; }
+.tutorial-card button { width:100%; min-height:46px; }
+#tutorialNext { background:#2a9150; color:white; }
+#tutorialSkip { margin-top:8px; background:#eef2f3; color:#52616b; }
 
 #reticle.full-draw { filter:drop-shadow(0 0 5px rgba(255,255,255,.95)); }
 #app::after { content:""; position:absolute; inset:0; pointer-events:none; z-index:2; opacity:calc(var(--draw-focus, 0) * .16); background:radial-gradient(circle at 50% 50%, transparent 35%, rgba(10,18,22,.5) 100%); transition:opacity .08s linear; }
@@ -162,6 +227,10 @@ small { display:block; margin-top:18px; color:#68757d; line-height:1.5; }
 @media (max-width:420px){
   .hud-card.wind { min-width:92px; }
   .bottom-controls { width:min(176px,48vw); }
+  .hand-coach { width:min(208px,54vw); left:50%; top:calc(max(12px, env(safe-area-inset-top)) + 96px); }
+  .tutorial-card { width:min(270px,70vw); left:50%; bottom:max(82px, calc(env(safe-area-inset-bottom) + 72px)); padding:14px; }
+  .tutorial-card h2 { font-size:17px; }
+  .tutorial-card p { font-size:12px; }
 }
 @media (prefers-reduced-motion: reduce){
   #bullseyeFx.fire, #bullseyeFx.fire::before, #bullseyeFx.fire span { animation-duration:.01ms; }
