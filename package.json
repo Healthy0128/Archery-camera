@@ -1,0 +1,9 @@
+{
+  "name": "gyro-archery",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test",
+    "check": "node --check main.js && node --check inputs.js && node --check match.js && node --check player-calibration.js && node --check tutorial.js && node --check game-config.js"
+  }
+}
