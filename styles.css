@@ -63,6 +63,7 @@ p { margin:0 0 18px; color:#42515a; }
 
 .setup-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin:16px 0 18px; text-align:left; }
 .setup-grid label { display:flex; flex-direction:column; gap:6px; font-size:12px; font-weight:800; color:#52616b; }
+.field-note { font-size:10px; line-height:1.2; font-style:normal; font-weight:500; color:#7a878d; }
 .setup-grid select {
   width:100%;
   min-height:48px;

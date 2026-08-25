@@ -34,6 +34,8 @@ test('pinch release fires once and requires re-arming', () => {
   const hand = makeHand(() => { releases += 1; });
   hand.power = hand.targetPower = .8;
   hand.updateReleaseGesture(landmarks(.3), 0);
+  hand.updateReleaseGesture(landmarks(.3), 50);
+  hand.updateReleaseGesture(landmarks(.3), 100);
   hand.updateReleaseGesture(landmarks(.3), 180);
   hand.updateReleaseGesture(landmarks(.9), 230);
   hand.updateReleaseGesture(landmarks(1), 280);
@@ -49,4 +51,16 @@ test('resetting after tracking loss prevents a late open-hand release', () => {
   hand.resetGesture();
   hand.updateReleaseGesture(landmarks(.9), 400);
   assert.equal(releases, 0);
+});
+
+test('slow opening cancels the release instead of firing', () => {
+  let releases = 0;
+  const hand = makeHand(() => { releases += 1; });
+  hand.power = hand.targetPower = .8;
+  for (const time of [0, 50, 100, 180]) hand.updateReleaseGesture(landmarks(.3), time);
+  hand.updateReleaseGesture(landmarks(.8), 230);
+  hand.updateReleaseGesture(landmarks(.82), 280);
+  hand.updateReleaseGesture(landmarks(.84), 480);
+  assert.equal(releases, 0);
+  assert.equal(hand.pinchHeld, false);
 });
