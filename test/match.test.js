@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { Match } from '../match.js';
-import { profileForDistance } from '../game-config.js';
+import { lowerQuality, profileForDistance, resolveQuality } from '../game-config.js';
 
 test('P1→P2→P3→P4→P1 restores independent hand and phone settings', () => {
   const match = new Match(5);
@@ -64,4 +64,17 @@ test('distance profiles increase wind challenge without a sudden jump', () => {
   for (let index = 1; index < windEffects.length; index += 1) {
     assert.ok(windEffects[index] / windEffects[index - 1] < 4);
   }
+});
+
+test('automatic quality is conservative when iOS-style capability data is unavailable', () => {
+  assert.equal(resolveQuality('auto', {}).key, 'balanced');
+  assert.equal(resolveQuality('auto', { hardwareConcurrency: 4 }).key, 'lite');
+  assert.equal(resolveQuality('auto', { deviceMemory: 8, hardwareConcurrency: 8 }).key, 'high');
+  assert.equal(resolveQuality('lite', { deviceMemory: 8, hardwareConcurrency: 8 }).key, 'lite');
+});
+
+test('performance fallback only lowers quality and stops at lite', () => {
+  assert.equal(lowerQuality(resolveQuality('high')).key, 'balanced');
+  assert.equal(lowerQuality(resolveQuality('balanced')).key, 'lite');
+  assert.equal(lowerQuality(resolveQuality('lite')).key, 'lite');
 });

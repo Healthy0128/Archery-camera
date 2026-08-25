@@ -55,13 +55,20 @@ export const QUALITY_PROFILES = Object.freeze({
   lite: Object.freeze({ key: 'lite', label: '軽量', pixelRatioCap: 1, shadows: false, treeSpacing: 14, handInferenceIntervalMs: 90, cameraWidth: 384, cameraHeight: 288 })
 });
 
-export function resolveQuality(choice = 'auto') {
+export function resolveQuality(choice = 'auto', capabilities) {
   if (choice !== 'auto' && QUALITY_PROFILES[choice]) return QUALITY_PROFILES[choice];
-  const memory = typeof navigator !== 'undefined' ? navigator.deviceMemory : undefined;
-  const cores = typeof navigator !== 'undefined' ? navigator.hardwareConcurrency : undefined;
+  const device = capabilities || (typeof navigator !== 'undefined' ? navigator : {});
+  const memory = device.deviceMemory;
+  const cores = device.hardwareConcurrency;
   if ((Number.isFinite(memory) && memory <= 3) || (Number.isFinite(cores) && cores <= 4)) return QUALITY_PROFILES.lite;
-  if (Number.isFinite(memory) && memory <= 4) return QUALITY_PROFILES.balanced;
-  return QUALITY_PROFILES.high;
+  if (Number.isFinite(memory) && memory >= 6 && Number.isFinite(cores) && cores >= 6) return QUALITY_PROFILES.high;
+  return QUALITY_PROFILES.balanced;
+}
+
+export function lowerQuality(profile) {
+  if (profile?.key === 'high') return QUALITY_PROFILES.balanced;
+  if (profile?.key === 'balanced') return QUALITY_PROFILES.lite;
+  return QUALITY_PROFILES.lite;
 }
 
 export function profileForDistance(distance) {

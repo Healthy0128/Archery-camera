@@ -28,9 +28,10 @@ The result is smoothed into a 0–100% draw meter. Arrow launch speed changes wi
 - The optional guided practice arrow is excluded from match scores.
 
 ## Device performance settings
-- `自動` selects a conservative profile on devices with limited memory/CPU.
+- `自動` uses a conservative standard profile when browser capability data is unavailable (including many iPhone/iPad environments), and starts light on devices reporting limited memory/CPU.
+- While playing in `自動`, sustained frame rates below 24 fps lower the profile one step without interrupting the match.
 - `標準`, `軽量`, and `高画質` adjust renderer pixel ratio, shadows, tree density, camera resolution, and hand-inference interval.
-- The setting can be changed from the start menu and is applied without reloading the page. Camera frames remain on-device.
+- The setting can be changed from the start menu and is applied without reloading the page. A live camera track is updated where the browser supports it. Camera frames remain on-device.
 
 ## Code structure
 - `inputs.js`: gyroscope and MediaPipe hand input
