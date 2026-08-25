@@ -200,8 +200,20 @@ export class HandInput {
     this.emitState(this.activeBaseline ? 'registered' : 'unregistered', this.activeBaseline ? '基準登録済み' : '基準を登録してください');
   }
 
-  setQuality(quality) {
+  async setQuality(quality) {
     this.runtimeQuality = quality;
+    const track = this.stream?.getVideoTracks?.()[0];
+    if (!track?.applyConstraints) return;
+    try {
+      await track.applyConstraints({
+        width: { ideal: quality.cameraWidth },
+        height: { ideal: quality.cameraHeight },
+        frameRate: { ideal: 30, max: 30 }
+      });
+      this.resizeOverlay();
+    } catch {
+      // Some browsers do not allow changing a live camera track. Inference pacing still updates.
+    }
   }
 
   collectCalibrationSample(sample, now) {

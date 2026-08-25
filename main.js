@@ -1,6 +1,6 @@
 import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js';
 import { FilesetResolver, HandLandmarker } from 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.0.1/+esm';
-import { CONFIG, profileForDistance, resolveQuality } from './game-config.js';
+import { CONFIG, lowerQuality, profileForDistance, resolveQuality } from './game-config.js';
 import { GyroInput, HandInput } from './inputs.js';
 import { Match } from './match.js';
 import { TutorialController } from './tutorial.js';
@@ -14,7 +14,7 @@ const ui={
   score:$('#score'), arrows:$('#arrows'), wind:$('#wind'), powerText:$('#powerText'), powerFill:$('#powerFill'),
   player:$('#playerHud'), distance:$('#distanceHud'),
   message:$('#message'), startPanel:$('#startPanel'), startBtn:$('#startBtn'), mouseBtn:$('#mouseBtn'),
-  playerCount:$('#playerCount'), distanceSelect:$('#distanceSelect'), qualitySelect:$('#qualitySelect'),
+  playerCount:$('#playerCount'), distanceSelect:$('#distanceSelect'), qualitySelect:$('#qualitySelect'), qualityHint:$('#qualityHint'),
   calibrateBtn:$('#calibrateBtn'), handCalibrateBtn:$('#handCalibrateBtn'), soundBtn:$('#soundBtn'),
   handPreview:$('#handPreview'), handStatus:$('#handStatus'), handVideo:$('#handVideo'), handOverlay:$('#handOverlay'),
   reticle:$('#reticle'), app:$('#app'), combo:$('#combo'), comboCard:$('#comboCard'), bullseye:$('#bullseyeFx'),
@@ -37,6 +37,7 @@ const hand=new HandInput(CONFIG.hand,{
 let drawPower=0,running=false,mouseMode=false,soundOn=true,wind=0,fullDrawHold=0,releaseKick=0,cinematic=null,turnLocked=true;
 let targetZ=-20.5;
 let quality=resolveQuality(ui.qualitySelect.value);
+let qualitySampleStart=0,qualitySampleFrames=0,lastQualityDropAt=0;
 
 function showMessage(text,ms=800){
   ui.message.textContent=text;
@@ -101,6 +102,22 @@ function applyQuality(nextQuality){
   treeObjects.forEach((pair,index)=>pair.forEach(mesh=>{mesh.visible=index%stride===0;}));
   ui.app.dataset.quality=quality.key;
   hand.setQuality(quality);
+  ui.qualityHint.textContent=ui.qualitySelect.value==='auto'?`自動判定：${quality.label}`:`${quality.label}で動作`;
+  qualitySampleStart=0;qualitySampleFrames=0;
+}
+
+function monitorAutoQuality(now){
+  if(ui.qualitySelect.value!=='auto'||!running||document.hidden||quality.key==='lite')return;
+  if(!qualitySampleStart){qualitySampleStart=now;qualitySampleFrames=0;return;}
+  qualitySampleFrames+=1;
+  const elapsed=now-qualitySampleStart;
+  if(elapsed<4000)return;
+  const fps=qualitySampleFrames*1000/elapsed;
+  qualitySampleStart=now;qualitySampleFrames=0;
+  if(fps>=24||now-lastQualityDropAt<8000)return;
+  const next=lowerQuality(quality);
+  if(next.key===quality.key)return;
+  lastQualityDropAt=now;applyQuality(next);showMessage(`動作を安定させるため${next.label}へ変更`,1800);
 }
 
 applyQuality(quality);
@@ -355,7 +372,7 @@ window.addEventListener('resize',resize,{passive:true});resize();
 
 const clock=new THREE.Clock();
 function animate(now=performance.now()){
-  requestAnimationFrame(animate);const dt=Math.min(clock.getDelta(),.033);gyro.update(dt);hand.updateTracking(now);updateDraw(dt);
+  requestAnimationFrame(animate);monitorAutoQuality(now);const dt=Math.min(clock.getDelta(),.033);gyro.update(dt);hand.updateTracking(now);updateDraw(dt);
   const strain=clamp((fullDrawHold-1.5)/2.5,0,1);
   if(!cinematic){camera.position.copy(HOME);releaseKick=Math.max(0,releaseKick-dt*7);const kick=-Math.sin((1-releaseKick)*Math.PI)*.018*releaseKick;aimEuler.set(gyro.pitch+kick,gyro.yaw,0,'YXZ');camera.quaternion.setFromEuler(aimEuler);bow.position.x=-.72+Math.sin(now*.0015)*.006+Math.sin(now*.048)*.004*strain;bow.position.y=-.55+Math.sin(now*.041)*.0025*strain;}
   updateArrows(cinematic?.phase==='impact'?dt*.18:dt);updateCinematic(dt);updateWind(now);renderer.render(scene,camera);
