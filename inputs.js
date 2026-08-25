@@ -116,6 +116,7 @@ export class HandInput {
     this.enabled = false;
     this.ready = false;
     this.initPromise = null;
+    this.runtimeQuality = null;
     this.detected = false;
     this.landmarker = null;
     this.stream = null;
@@ -129,15 +130,21 @@ export class HandInput {
     this.targetPower = 0;
     this.ctx = elements.overlay.getContext('2d');
     this.pinchHeld = false;
+    this.closeFrames = 0;
+    this.openFrames = 0;
     this.pinchStart = 0;
     this.releaseArmed = false;
+    this.releaseCandidateAt = 0;
+    this.releaseCooldownUntil = 0;
     this.lastPinchRatio = null;
+    this.lastRatioAt = 0;
     this.state = 'unregistered';
   }
 
-  async init(FilesetResolver, HandLandmarker) {
+  async init(FilesetResolver, HandLandmarker, quality) {
     if (this.ready) return;
     if (this.initPromise) return this.initPromise;
+    this.runtimeQuality = quality || this.runtimeQuality;
     this.initPromise = this.initialize(FilesetResolver, HandLandmarker);
     try {
       await this.initPromise;
@@ -149,8 +156,9 @@ export class HandInput {
   async initialize(FilesetResolver, HandLandmarker) {
     if (!navigator.mediaDevices?.getUserMedia) throw new Error('camera unavailable');
     this.elements.preview.classList.add('active');
+    const quality = this.runtimeQuality || { cameraWidth: 640, cameraHeight: 480 };
     this.stream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 }, frameRate: { ideal: 30, max: 30 } },
+      video: { facingMode: 'user', width: { ideal: quality.cameraWidth }, height: { ideal: quality.cameraHeight }, frameRate: { ideal: 30, max: 30 } },
       audio: false
     });
     this.elements.video.srcObject = this.stream;
@@ -190,6 +198,10 @@ export class HandInput {
     this.power = this.targetPower = 0;
     this.resetGesture();
     this.emitState(this.activeBaseline ? 'registered' : 'unregistered', this.activeBaseline ? '基準登録済み' : '基準を登録してください');
+  }
+
+  setQuality(quality) {
+    this.runtimeQuality = quality;
   }
 
   collectCalibrationSample(sample, now) {
@@ -249,24 +261,53 @@ export class HandInput {
     const close = ratio <= this.config.pinchCloseRatio;
     const open = ratio >= this.config.pinchOpenRatio;
     const jump = this.lastPinchRatio == null ? 0 : ratio - this.lastPinchRatio;
+    const velocity = this.lastPinchRatio == null || this.lastRatioAt === 0
+      ? 0
+      : (ratio - this.lastPinchRatio) / Math.max((now - this.lastRatioAt) / 1000, .001);
     const releasePower = Math.max(this.power, this.targetPower);
+    if (now < this.releaseCooldownUntil) {
+      this.lastPinchRatio = ratio;
+      this.lastRatioAt = now;
+      return { ratio, released: false, armed: false };
+    }
     if (close) {
+      this.closeFrames += 1;
+      this.openFrames = 0;
       if (!this.pinchHeld) {
-        this.pinchHeld = true;
-        this.pinchStart = now;
-        this.releaseArmed = false;
+        if (this.closeFrames >= this.config.pinchConfirmFrames) {
+          this.pinchHeld = true;
+          const inferenceInterval = this.runtimeQuality?.handInferenceIntervalMs || 50;
+          this.pinchStart = now - (this.closeFrames - 1) * inferenceInterval;
+          this.releaseArmed = false;
+        }
       }
       if (now - this.pinchStart >= this.config.pinchHoldMs && releasePower >= this.config.minReleasePower) this.releaseArmed = true;
     } else if (this.pinchHeld) {
-      if (this.releaseArmed && open && jump >= this.config.pinchReleaseJump) {
-        this.resetGesture();
-        this.lastPinchRatio = ratio;
-        this.callbacks.onRelease?.(releasePower);
-        return { ratio, released: true, armed: false };
+      this.closeFrames = 0;
+      if (this.releaseArmed && open) {
+        if (!this.releaseCandidateAt) this.releaseCandidateAt = now;
+        this.openFrames += 1;
+        const fastEnough = jump >= this.config.pinchReleaseJump || velocity >= this.config.releaseMinVelocity;
+        if (fastEnough && this.openFrames >= this.config.releaseConfirmFrames) {
+          this.resetGesture();
+          this.releaseCooldownUntil = now + this.config.releaseCooldownMs;
+          this.lastPinchRatio = ratio;
+          this.lastRatioAt = now;
+          this.callbacks.onRelease?.(releasePower);
+          return { ratio, released: true, armed: false };
+        }
+        if (now - this.releaseCandidateAt >= this.config.releaseWindowMs) {
+          this.resetGesture();
+          this.lastPinchRatio = ratio;
+          this.lastRatioAt = now;
+          return { ratio, released: false, armed: false, cancelled: true };
+        }
       }
-      if (open) this.resetGesture();
+    } else {
+      this.closeFrames = 0;
     }
     this.lastPinchRatio = ratio;
+    this.lastRatioAt = now;
     return { ratio, released: false, armed: this.releaseArmed };
   }
 
@@ -301,7 +342,8 @@ export class HandInput {
 
   updateTracking(now) {
     if (!this.enabled || !this.ready || this.elements.video.readyState < 2 || !this.landmarker) return;
-    if (now - this.lastInference < 50 || this.elements.video.currentTime === this.lastVideoTime) return;
+    const inferenceInterval = this.runtimeQuality?.handInferenceIntervalMs || 50;
+    if (now - this.lastInference < inferenceInterval || this.elements.video.currentTime === this.lastVideoTime) return;
     this.lastInference = now;
     this.lastVideoTime = this.elements.video.currentTime;
     let result;
@@ -313,15 +355,12 @@ export class HandInput {
     }
     const landmarks = result.landmarks?.[0];
     if (!landmarks) {
-      const gap = now - this.lastDetectedAt;
-      if (gap >= this.config.detectionGraceMs) {
-        this.detected = false;
-        this.lastSample = null;
-        this.targetPower = 0;
-        this.resetGesture();
-        this.drawLandmarks(null);
-        this.emitState('missing', '手をカメラに戻してください');
-      }
+      this.detected = false;
+      this.lastSample = null;
+      this.targetPower = 0;
+      this.resetGesture();
+      this.drawLandmarks(null);
+      this.emitState('missing', '手をカメラに戻してください');
       return;
     }
     this.detected = true;
@@ -338,6 +377,7 @@ export class HandInput {
       const gesture = this.updateReleaseGesture(landmarks, now);
       const power = Math.max(this.power, this.targetPower);
       if (gesture.released) this.emitState('released', 'リリース検出');
+      else if (gesture.cancelled) this.emitState('registered', 'ゆっくり開いたためキャンセル・もう一度🤏');
       else if (gesture.armed) this.emitState('ready', `発射可能・引き ${Math.round(power * 100)}%`);
       else if (this.pinchHeld && power < this.config.minReleasePower) this.emitState('draw-low', '引き不足・もっと奥へ引いてください');
       else if (this.pinchHeld) this.emitState('pinched', '弦をつかんだ・そのまま奥へ');
@@ -353,9 +393,14 @@ export class HandInput {
 
   resetGesture() {
     this.pinchHeld = false;
+    this.closeFrames = 0;
+    this.openFrames = 0;
     this.pinchStart = 0;
     this.releaseArmed = false;
+    this.releaseCandidateAt = 0;
+    this.releaseCooldownUntil = 0;
     this.lastPinchRatio = null;
+    this.lastRatioAt = 0;
   }
 
   resetForTurn() {

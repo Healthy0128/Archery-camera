@@ -23,8 +23,14 @@ The result is smoothed into a 0–100% draw meter. Arrow launch speed changes wi
 ## Multiplayer calibration
 - Each player owns an independent palm-core baseline and phone-hand setting.
 - A baseline is registered only after a short stable-sample window and is restored on that player's next turn.
-- Tracking loss clears an armed pinch after a short grace period, preventing a late open hand from firing.
+- Pinch acquisition requires three consecutive frames, and release requires two consecutive open frames with a minimum opening speed. A slow opening is cancelled instead of firing.
+- If the hand disappears from the camera, the pinch state is cleared immediately, so returning the hand cannot cause a late release.
 - The optional guided practice arrow is excluded from match scores.
+
+## Device performance settings
+- `自動` selects a conservative profile on devices with limited memory/CPU.
+- `標準`, `軽量`, and `高画質` adjust renderer pixel ratio, shadows, tree density, camera resolution, and hand-inference interval.
+- The setting can be changed from the start menu and is applied without reloading the page. Camera frames remain on-device.
 
 ## Code structure
 - `inputs.js`: gyroscope and MediaPipe hand input

@@ -23,6 +23,11 @@ export const CONFIG = Object.freeze({
     pinchCloseRatio: .42,
     pinchOpenRatio: .72,
     pinchReleaseJump: .16,
+    pinchConfirmFrames: 3,
+    releaseConfirmFrames: 2,
+    releaseMinVelocity: 1.15,
+    releaseWindowMs: 220,
+    releaseCooldownMs: 500,
     minReleasePower: .55,
     pinchHoldMs: 140,
     detectionGraceMs: 180,
@@ -43,6 +48,21 @@ export const DISTANCE_PROFILES = Object.freeze({
   25: Object.freeze({ minArrowSpeed: 24, maxArrowSpeed: 62, gravity: 4.2, windAcceleration: .54, windLimit: 2.25 }),
   35: Object.freeze({ minArrowSpeed: 23, maxArrowSpeed: 61, gravity: 4.55, windAcceleration: .66, windLimit: 3.05 })
 });
+
+export const QUALITY_PROFILES = Object.freeze({
+  high: Object.freeze({ key: 'high', label: '高画質', pixelRatioCap: 2, shadows: true, treeSpacing: 6, handInferenceIntervalMs: 50, cameraWidth: 640, cameraHeight: 480 }),
+  balanced: Object.freeze({ key: 'balanced', label: '標準', pixelRatioCap: 1.5, shadows: false, treeSpacing: 9, handInferenceIntervalMs: 65, cameraWidth: 512, cameraHeight: 384 }),
+  lite: Object.freeze({ key: 'lite', label: '軽量', pixelRatioCap: 1, shadows: false, treeSpacing: 14, handInferenceIntervalMs: 90, cameraWidth: 384, cameraHeight: 288 })
+});
+
+export function resolveQuality(choice = 'auto') {
+  if (choice !== 'auto' && QUALITY_PROFILES[choice]) return QUALITY_PROFILES[choice];
+  const memory = typeof navigator !== 'undefined' ? navigator.deviceMemory : undefined;
+  const cores = typeof navigator !== 'undefined' ? navigator.hardwareConcurrency : undefined;
+  if ((Number.isFinite(memory) && memory <= 3) || (Number.isFinite(cores) && cores <= 4)) return QUALITY_PROFILES.lite;
+  if (Number.isFinite(memory) && memory <= 4) return QUALITY_PROFILES.balanced;
+  return QUALITY_PROFILES.high;
+}
 
 export function profileForDistance(distance) {
   return DISTANCE_PROFILES[distance] || DISTANCE_PROFILES[25];

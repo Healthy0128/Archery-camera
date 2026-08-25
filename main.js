@@ -1,6 +1,6 @@
 import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js';
 import { FilesetResolver, HandLandmarker } from 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.0.1/+esm';
-import { CONFIG, profileForDistance } from './game-config.js';
+import { CONFIG, profileForDistance, resolveQuality } from './game-config.js';
 import { GyroInput, HandInput } from './inputs.js';
 import { Match } from './match.js';
 import { TutorialController } from './tutorial.js';
@@ -14,7 +14,7 @@ const ui={
   score:$('#score'), arrows:$('#arrows'), wind:$('#wind'), powerText:$('#powerText'), powerFill:$('#powerFill'),
   player:$('#playerHud'), distance:$('#distanceHud'),
   message:$('#message'), startPanel:$('#startPanel'), startBtn:$('#startBtn'), mouseBtn:$('#mouseBtn'),
-  playerCount:$('#playerCount'), distanceSelect:$('#distanceSelect'),
+  playerCount:$('#playerCount'), distanceSelect:$('#distanceSelect'), qualitySelect:$('#qualitySelect'),
   calibrateBtn:$('#calibrateBtn'), handCalibrateBtn:$('#handCalibrateBtn'), soundBtn:$('#soundBtn'),
   handPreview:$('#handPreview'), handStatus:$('#handStatus'), handVideo:$('#handVideo'), handOverlay:$('#handOverlay'),
   reticle:$('#reticle'), app:$('#app'), combo:$('#combo'), comboCard:$('#comboCard'), bullseye:$('#bullseyeFx'),
@@ -36,6 +36,7 @@ const hand=new HandInput(CONFIG.hand,{
 });
 let drawPower=0,running=false,mouseMode=false,soundOn=true,wind=0,fullDrawHold=0,releaseKick=0,cinematic=null,turnLocked=true;
 let targetZ=-20.5;
+let quality=resolveQuality(ui.qualitySelect.value);
 
 function showMessage(text,ms=800){
   ui.message.textContent=text;
@@ -77,8 +78,8 @@ const tutorial=new TutorialController({
   hint:$('#tutorialHint'),next:$('#tutorialNext'),skip:$('#tutorialSkip')
 },{onFinish:()=>endTutorial()});
 
-const renderer=new THREE.WebGLRenderer({canvas,antialias:true,powerPreference:'high-performance'});
-renderer.setPixelRatio(Math.min(devicePixelRatio,2));renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFSoftShadowMap;renderer.outputColorSpace=THREE.SRGBColorSpace;
+const renderer=new THREE.WebGLRenderer({canvas,antialias:quality.key==='high',powerPreference:'high-performance'});
+renderer.setPixelRatio(Math.min(devicePixelRatio,quality.pixelRatioCap));renderer.shadowMap.enabled=quality.shadows;renderer.shadowMap.type=THREE.PCFSoftShadowMap;renderer.outputColorSpace=THREE.SRGBColorSpace;
 
 const scene=new THREE.Scene();scene.background=new THREE.Color(0xa8dcff);scene.fog=new THREE.Fog(0xa8dcff,42,95);
 const camera=new THREE.PerspectiveCamera(CONFIG.baseFov,1,.1,150);const HOME=new THREE.Vector3(0,1.65,4.5);camera.position.copy(HOME);scene.add(camera);
@@ -87,8 +88,22 @@ scene.add(new THREE.HemisphereLight(0xffffff,0x4c6c38,2.2));const sun=new THREE.
 const ground=new THREE.Mesh(new THREE.PlaneGeometry(130,130),new THREE.MeshStandardMaterial({color:0x72ad52,roughness:1}));ground.rotation.x=-Math.PI/2;ground.receiveShadow=true;scene.add(ground);
 const lane=new THREE.Mesh(new THREE.PlaneGeometry(7,48),new THREE.MeshStandardMaterial({color:0xcaa873,roughness:1}));lane.rotation.x=-Math.PI/2;lane.position.set(0,.012,-19.5);lane.receiveShadow=true;scene.add(lane);
 const trunkMat=new THREE.MeshStandardMaterial({color:0x765035,roughness:1}),leafMat=new THREE.MeshStandardMaterial({color:0x3b8647,roughness:1});
-function addTree(x,z,s=.9){const trunk=new THREE.Mesh(new THREE.CylinderGeometry(.18*s,.25*s,1.9*s,8),trunkMat);trunk.position.set(x,.95*s,z);scene.add(trunk);const crown=new THREE.Mesh(new THREE.ConeGeometry(1.1*s,2.8*s,9),leafMat);crown.position.set(x,2.7*s,z);scene.add(crown);}
-for(let z=-4;z>-66;z-=6){addTree(-7,z);addTree(7,z);}
+const treeObjects=[];
+function addTree(x,z,s=.9){const trunk=new THREE.Mesh(new THREE.CylinderGeometry(.18*s,.25*s,1.9*s,8),trunkMat);trunk.position.set(x,.95*s,z);scene.add(trunk);const crown=new THREE.Mesh(new THREE.ConeGeometry(1.1*s,2.8*s,9),leafMat);crown.position.set(x,2.7*s,z);scene.add(crown);treeObjects.push([trunk,crown]);}
+for(let z=-4;z>-66;z-=quality.treeSpacing){addTree(-7,z);addTree(7,z);}
+
+function applyQuality(nextQuality){
+  quality=nextQuality;
+  renderer.setPixelRatio(Math.min(devicePixelRatio,quality.pixelRatioCap));
+  renderer.shadowMap.enabled=quality.shadows;
+  sun.castShadow=quality.shadows;
+  const stride=Math.max(1,Math.round(quality.treeSpacing/6));
+  treeObjects.forEach((pair,index)=>pair.forEach(mesh=>{mesh.visible=index%stride===0;}));
+  ui.app.dataset.quality=quality.key;
+  hand.setQuality(quality);
+}
+
+applyQuality(quality);
 
 const target=new THREE.Group();target.position.set(0,2.2,targetZ);scene.add(target);
 [[1.65,0xf5f2df],[1.35,0x20242a],[1.08,0x2785c6],[.80,0xd73c38],[.52,0xf0c52c],[.20,0xf6d13e]].forEach(([r,c],i)=>{const disk=new THREE.Mesh(new THREE.CylinderGeometry(r,r,.12,64),new THREE.MeshStandardMaterial({color:c,roughness:.75}));disk.rotation.x=Math.PI/2;disk.position.z=i*.011;target.add(disk);});
@@ -284,7 +299,8 @@ async function startGame(useSensors){
   clearTimeout(turnTimer);turnTimer=null;practiceMode=false;
   match.configure(Number(ui.playerCount.value),Number(ui.distanceSelect.value),selectedMenuPhoneHand());applyDistance(match.distance);clearArrows();updateHud();hand.resetMatch();camera.fov=CONFIG.baseFov;camera.updateProjectionMatrix();
   if(soundOn)audio.start();
-  if(useSensors){try{await hand.init(FilesetResolver,HandLandmarker);}catch{hand.enabled=false;ui.handPreview.classList.remove('active');ui.handCoach.classList.remove('active');showMessage('カメラなしで開始',1300);}}
+  hand.setQuality(quality);
+  if(useSensors){try{await hand.init(FilesetResolver,HandLandmarker,quality);}catch{hand.enabled=false;ui.handPreview.classList.remove('active');ui.handCoach.classList.remove('active');showMessage('カメラなしで開始',1300);}}
   else{hand.enabled=false;drawPower=.82;}
   if(hand.enabled&&ui.tutorialEnabled.checked)startTutorial();else showTurnPanel(true);
 }
@@ -303,6 +319,7 @@ ui.mouseBtn.addEventListener('click',async()=>{
   if(starting)return;starting=true;ui.startBtn.disabled=true;ui.mouseBtn.disabled=true;
   try{await startGame(false);}finally{starting=false;}
 });
+ui.qualitySelect.addEventListener('change',()=>applyQuality(resolveQuality(ui.qualitySelect.value)));
 ui.turnReadyBtn.addEventListener('click',e=>{e.stopPropagation();beginTurn();});
 for(const button of ui.turnHandSetup.querySelectorAll('[data-phone-hand]')){
   button.addEventListener('click',e=>{
